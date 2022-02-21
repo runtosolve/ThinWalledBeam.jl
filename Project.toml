@@ -2,3 +2,6 @@ name = "ThinWalledBeam"
 uuid = "1c93ddf5-a21f-4e01-8bde-98213f7f7d54"
 authors = ["Cris Moen <cris.moen@runtosolve.com>"]
 version = "0.1.0"
+
+[deps]
+DiffEqOperators = "9fdde737-9c7f-55bf-ade8-46b3f136cc48"
