@@ -1,46 +1,73 @@
 module ThinWalledBeam
 
-using DiffEqOperators: CenteredDifference, LinearAlgebra, NLsolve
+using DiffEqOperators: CenteredDifference
+using LinearAlgebra
+using NLsolve
 
-export define, solve
+export solve
 
 
-Base.@kwdef mutable struct Model   #using Parameters.jl macro here to help assign some constants, leave others for later.
+struct Dof
 
-   Ix::Union{Array{Float64}, Nothing} = nothing
-   Iy::Union{Array{Float64}, Nothing} = nothing
-   Ixy::Union{Array{Float64}, Nothing} = nothing
-   J::Union{Array{Float64}, Nothing} = nothing
-   Cw::Union{Array{Float64}, Nothing} = nothing
-   E::Union{Array{Float64}, Nothing} = nothing
-   ν::Union{Array{Float64}, Nothing} = nothing
-   G::Union{Array{Float64}, Nothing} = nothing
-   ax::Union{Array{Float64}, Nothing} = nothing
-   ay::Union{Array{Float64}, Nothing} = nothing
-   ay_kx::Union{Array{Array{Float64}}, Nothing} = nothing
-   kx::Union{Array{Array{Float64}}, Nothing} = nothing
-   kϕ::Union{Array{Array{Float64}}, Nothing} = nothing
-
-   qx::Union{Array{Float64}, Nothing} = nothing
-   qy::Union{Array{Float64}, Nothing} = nothing
-
-   end_boundary_conditions::Union{Array{Int64}, Nothing} = nothing
-   supports::Union{Vector{Tuple{Float64, String, String, String}}, Nothing} = nothing
-
-   z::Union{Array{Float64}, Nothing} = nothing
-
-   Kff::Union{Matrix{Float64}, Nothing} = nothing 
-   Ff::Union{Array{Float64}, Nothing} = nothing
-
-   free_dof_u::Union{Array{Int64}, Nothing} = nothing
-   free_dof_v::Union{Array{Int64}, Nothing} = nothing
-   free_dof_ϕ::Union{Array{Int64}, Nothing} = nothing
-
-   u::Union{Array{Float64}, Nothing} = nothing
-   v::Union{Array{Float64}, Nothing} = nothing
-   ϕ::Union{Array{Float64}, Nothing} = nothing
+   u::Array{Int64}
+   v::Array{Int64}
+   ϕ::Array{Int64}
 
 end
+
+struct Inputs   
+
+   z::Array{Float64}
+   Ix::Array{Float64}
+   Iy::Array{Float64}
+   Ixy::Array{Float64}
+   J::Array{Float64}
+   Cw::Array{Float64}
+   E::Array{Float64}
+   ν::Array{Float64}
+   G::Array{Float64}
+   ax::Array{Float64}
+   ay::Array{Float64}
+   ay_kx::Array{Float64}
+   kx::Array{Float64}
+   kϕ::Array{Float64}
+
+   qx::Array{Float64}
+   qy::Array{Float64}
+
+   end_boundary_conditions::Array{String} 
+   supports::Vector{Tuple{Float64, String, String, String}} 
+
+end
+
+struct Equations
+
+   K::Matrix{Float64}
+   F::Array{Float64}
+   Kff::Matrix{Float64}
+   Ff::Array{Float64}
+   free_dof::Dof
+   free_dof_global::Array{Int64}
+
+end
+
+struct Outputs
+
+   u::Array{Float64}
+   v::Array{Float64}
+   ϕ::Array{Float64}
+
+end
+
+struct Model
+
+   inputs::Inputs
+   equations::Equations
+   outputs::Outputs
+
+end
+
+
 
 
 function calculate_derivative_operators(dz)
@@ -89,7 +116,7 @@ function calculate_boundary_stencils(bc_flag, h, nth_derivative)
    #row4*[A;B;C;D;E]*u2'''
    #row5*[A;B;C;D;E]*u2''''
 
-   if bc_flag == 1 #simply supported end
+   if bc_flag == "simply-supported" #simply supported end
 
       LHS = [1 1 1 1 0
          -1 0 1 2 0
@@ -101,7 +128,7 @@ function calculate_boundary_stencils(bc_flag, h, nth_derivative)
       boundary_stencil = LHS \ RHS
       boundary_stencil = ((boundary_stencil[1:4]),(zeros(4)))  #since u''=0
 
-   elseif bc_flag == 2 #fixed end
+   elseif bc_flag == "fixed" #fixed end
 
       LHS = [1 1 1 1 0
          -1 0 1 2 1
@@ -113,7 +140,7 @@ function calculate_boundary_stencils(bc_flag, h, nth_derivative)
       boundary_stencil = LHS\RHS
       boundary_stencil = ((boundary_stencil[1:4]),(zeros(4)))  #since u'=0
 
-   elseif bc_flag == 3 #free end
+   elseif bc_flag == "free" #free end
                 #u'' u'''
       LHS = [1 1 1  0   0
            0 1 2  0   0
@@ -153,7 +180,7 @@ function apply_end_boundary_conditions(A, end_boundary_conditions, nth_derivativ
    A[1,:] .= 0.0
    A[2,:] .= 0.0
 
-   if (bc_flag == 1) | (bc_flag == 2)   #make this cleaner, combine
+   if (bc_flag == "simply-supported") | (bc_flag == "fixed")   #make this cleaner, combine
       A[2,1:length(boundary_stencil[1])] = boundary_stencil[1]
    else
       A[1,1:length(boundary_stencil[1])] = boundary_stencil[1]
@@ -168,7 +195,7 @@ function apply_end_boundary_conditions(A, end_boundary_conditions, nth_derivativ
    A[end,:] .= 0.0
    A[end-1,:] .= 0.0
 
-   if (bc_flag == 1) | (bc_flag == 2)
+   if (bc_flag == "simply-supported") | (bc_flag == "fixed")
       A[end-1,(end-(length(boundary_stencil[1])-1)):end] = reverse(boundary_stencil[1])
    else
       A[end,end-(length(boundary_stencil[1])-1):end] = reverse(boundary_stencil[1])
@@ -179,27 +206,6 @@ function apply_end_boundary_conditions(A, end_boundary_conditions, nth_derivativ
 
 end
 
-function define(z, section_properties, material_properties, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
-
-   num_nodes = length(z)
-
-   #Define properties at each node.
-   Ix = ones(Float64, num_nodes) * section_properties.Ixx
-   Iy = ones(Float64, num_nodes) * section_properties.Iyy
-   Ixy = ones(Float64, num_nodes) * section_properties.Ixy
-   J = ones(Float64, num_nodes) * section_properties.J
-   Cw = ones(Float64, num_nodes) * section_properties.Cw
-
-   E = ones(Float64, num_nodes) * material_properties.E
-   ν = ones(Float64, num_nodes) * material_properties.ν
-   G = E./(2 .*(1 .+ ν))
-
-   #Store model inputs in data structure.
-   model = Model(Ix, Iy, Ixy, J, Cw, E, ν, G, ax, ay, ay_kx, kx, kϕ, qx, qy, end_boundary_conditions, supports, z, nothing, nothing, nothing, nothing, nothing, nothing, nothing,  nothing)
-  
-   return model
-
-end
 
 function define_fixed_dof(z, support_location, support_fixity)
 
@@ -218,23 +224,23 @@ function define_fixed_dof(z, support_location, support_fixity)
 end
 
 
-function governing_equations(model)
+function governing_equations(z, Ix, Iy, Ixy, J, Cw, E, G, kx, kϕ, ay_kx, qx, qy, ax, ay, supports, end_boundary_conditions)
 
     #The equilbrium equations come from Plaut and Moen(2019) https://cloud.aisc.org/SSRC/2020/43PlautandMoen2020SSRC.pdf.
 
    #Define the number of nodes.
-   num_nodes = length(model.z)
+   num_nodes = length(z)
 
    #Calculate the derivative operators.
-   dz = diff(model.z) 
+   dz = diff(z) 
    Azzzz,Azz = calculate_derivative_operators(dz) 
 
    #Apply left and right end boundary condition stencils to derivative operators.
    nth_derivative = 4
-   Azzzz = apply_end_boundary_conditions(Azzzz, model.end_boundary_conditions, nth_derivative, dz)
+   Azzzz = apply_end_boundary_conditions(Azzzz, end_boundary_conditions, nth_derivative, dz)
 
    nth_derivative = 2
-   Azz = apply_end_boundary_conditions(Azz, model.end_boundary_conditions, nth_derivative, dz)
+   Azz = apply_end_boundary_conditions(Azz, end_boundary_conditions, nth_derivative, dz)
 
    #Build identity matrix for ODE operations.
    AI = Matrix(1.0I, num_nodes, num_nodes)
@@ -242,42 +248,32 @@ function governing_equations(model)
    #Build operator matrix that doesn't update with load.
 
    #LHS first.
-   A11 = zeros(Float64, num_nodes,num_nodes)
-   A12 = zeros(Float64, num_nodes,num_nodes)
-   A13 = zeros(Float64, num_nodes,num_nodes)
-   A21 = zeros(Float64, num_nodes,num_nodes)
-   A22 = zeros(Float64, num_nodes,num_nodes)
-   A23 = zeros(Float64, num_nodes,num_nodes)
-   A31 = zeros(Float64, num_nodes,num_nodes)
-   A32 = zeros(Float64, num_nodes,num_nodes)
-   A33 = zeros(Float64, num_nodes,num_nodes)
-
-   #Sum spring terms if there are more than one on a cross-section.
-   sum_kx = sum(model.kx)
-   sum_kϕ = sum(model.kϕ)
-
-   num_kx_springs = size(model.kx)[1]
-   kx_ay_kx = [model.kx[i][:] .* model.ay_kx[i][:] for i=1:num_kx_springs] #multiply kx*ay_kx terms for each spring first
-   sum_kx_ay_kx = sum(kx_ay_kx) #then sum them
-   
-   kx_ay_kx_ay_kx = [model.kx[i][:] .* model.ay_kx[i][:] .* model.ay_kx[i][:] for i=1:num_kx_springs]
-   sum_kx_ay_kx_ay_kx = sum(kx_ay_kx_ay_kx)
+   A11 = zeros(Float64, num_nodes, num_nodes)
+   A12 = zeros(Float64, num_nodes, num_nodes)
+   A13 = zeros(Float64, num_nodes, num_nodes)
+   A21 = zeros(Float64, num_nodes, num_nodes)
+   A22 = zeros(Float64, num_nodes, num_nodes)
+   A23 = zeros(Float64, num_nodes, num_nodes)
+   A31 = zeros(Float64, num_nodes, num_nodes)
+   A32 = zeros(Float64, num_nodes, num_nodes)
+   A33 = zeros(Float64, num_nodes, num_nodes)
 
    #Calculate operator quantities on LHS  AU=B.
+   #Note that ay_kx is a modification of the Plaut and Moen equations, to allow the kx spring to be placed at any ay. 
    for i = 1:num_nodes
-      A11[i,:] = model.E .* model.Iy .* Azzzz[i,:] .+ sum_kx .* AI[i,:]
-      A12[i,:] = model.E .* model.Ixy .* Azzzz[i,:]
-      A13[i,:] = sum_kx_ay_kx .*AI[i,:]
-      A21[i,:] = model.E .* model.Ixy .* Azzzz[i,:]
-      A22[i,:] = model.E .* model.Ix .* Azzzz[i,:]
-      A31[i,:] = sum_kx_ay_kx .* AI[i,:]
-      A33[i,:] = model.E .* model.Cw .* Azzzz[i,:] .- model.G .* model.J .* Azz[i,:] .+ sum_kx_ay_kx_ay_kx .* AI[i,:] .+ sum_kϕ .* AI[i,:] .+ model.qx .* model.ax .* AI[i,:] .- model.qy .* model.ay .* AI[i,:]
+      A11[i,:] = E .* Iy .* Azzzz[i,:] .+ kx .* AI[i,:]
+      A12[i,:] = E .* Ixy .* Azzzz[i,:]
+      A13[i,:] = kx .* ay_kx .*AI[i,:]
+      A21[i,:] = E .* Ixy .* Azzzz[i,:]
+      A22[i,:] = E .* Ix .* Azzzz[i,:]
+      A31[i,:] = kx .* ay_kx .* AI[i,:]
+      A33[i,:] = E .* Cw .* Azzzz[i,:] .- G .* J .* Azz[i,:] .+ kx .* ay_kx .* ay_kx .* AI[i,:] .+ kϕ .* AI[i,:] .+ qx .* ax .* AI[i,:] .- qy .* ay .* AI[i,:]
    end
 
    #Calculate RHS of AU=B.
-   B1 = model.qx
-   B2 = model.qy
-   B3 = model.qx .* model.ay .+ model.qy .* model.ax
+   B1 = qx
+   B2 = qy
+   B3 = qx .* ay .+ qy .* ax
 
    #Reduce problem to free dof.
 
@@ -285,19 +281,19 @@ function governing_equations(model)
    fixed_dof_v = Array{Int64}(undef, 1)
    fixed_dof_ϕ = Array{Int64}(undef, 1)
 
-   for i = 1:length(model.supports)
+   for i = 1:length(supports)
 
       if i == 1
 
-         fixed_dof_u = define_fixed_dof(model.z, model.supports[i][1], model.supports[i][2])
-         fixed_dof_v = define_fixed_dof(model.z, model.supports[i][1], model.supports[i][3])
-         fixed_dof_ϕ = define_fixed_dof(model.z, model.supports[i][1], model.supports[i][4])
+         fixed_dof_u = define_fixed_dof(z, supports[i][1], supports[i][2])
+         fixed_dof_v = define_fixed_dof(z, supports[i][1], supports[i][3])
+         fixed_dof_ϕ = define_fixed_dof(z, supports[i][1], supports[i][4])
 
       else
 
-         new_fixed_dof_u = define_fixed_dof(model.z, model.supports[i][1], model.supports[i][2])
-         new_fixed_dof_v = define_fixed_dof(model.z, model.supports[i][1], model.supports[i][3])
-         new_fixed_dof_ϕ = define_fixed_dof(model.z, model.supports[i][1], model.supports[i][4])
+         new_fixed_dof_u = define_fixed_dof(z, supports[i][1], supports[i][2])
+         new_fixed_dof_v = define_fixed_dof(z, supports[i][1], supports[i][3])
+         new_fixed_dof_ϕ = define_fixed_dof(z, supports[i][1], supports[i][4])
          
          fixed_dof_u = [fixed_dof_u; new_fixed_dof_u]
          fixed_dof_v = [fixed_dof_v; new_fixed_dof_v]
@@ -307,10 +303,8 @@ function governing_equations(model)
 
    end
 
-   #Find free dof. 
-   model.free_dof_u = setdiff(1:num_nodes,fixed_dof_u)
-   model.free_dof_v = setdiff(1:num_nodes,fixed_dof_v)
-   model.free_dof_ϕ = setdiff(1:num_nodes,fixed_dof_ϕ)
+   #Define free dof. 
+   free_dof = Dof(setdiff(1:num_nodes,fixed_dof_u), setdiff(1:num_nodes,fixed_dof_v), setdiff(1:num_nodes,fixed_dof_ϕ))
 
    #Assemble global K.
    K = [A11 A12 A13;
@@ -318,23 +312,27 @@ function governing_equations(model)
    A31 A32 A33]
 
    #Partition stiffness matrix.
-   free_dof = [model.free_dof_u; model.free_dof_v .+ num_nodes; model.free_dof_ϕ .+ 2*num_nodes]
+   free_dof_global = [free_dof.u; free_dof.v .+ num_nodes; free_dof.ϕ .+ 2*num_nodes]
 
-   model.Kff = K[free_dof, free_dof]
+   Kff = K[free_dof_global, free_dof_global]
 
    #Define external force vector.
    F = [B1; B2; B3]
 
-   model.Ff = F[free_dof]
+   Ff = F[free_dof_global]
 
-   return model
+   equations = Equations(K, F, Kff, Ff, free_dof, free_dof_global)
+
+   return equations
 
 end
 
 function residual!(R, U, K, F)
 
    for i=1:length(F)
-    R[i] = transpose(K[i,:])*U-F[i]
+
+      R[i] = transpose(K[i,:]) * U - F[i]
+
    end
 
    return R
@@ -342,13 +340,16 @@ function residual!(R, U, K, F)
 end
 
 
-function solve(model)
+function solve(z, Ix, Iy, Ixy, J, Cw, E, ν, G, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
+
+   #Define inputs.
+   inputs = Inputs(z, Ix, Iy, Ixy, J, Cw, E, ν, G, ax, ay, ay_kx, kx, kϕ, qx, qy, end_boundary_conditions, supports)
 
    #Set up solution matrices from governing equations.
-   model = governing_equations(model)
+   equations = governing_equations(z, Ix, Iy, Ixy, J, Cw, E, G, kx, kϕ, ay_kx, qx, qy, ax, ay, supports, end_boundary_conditions)
 
    #Define the number of nodes along the beam.
-   num_nodes = length(model.z)
+   num_nodes = length(z)
 
    #Define the deformation vectors.
    u = zeros(Float64, num_nodes)
@@ -356,20 +357,19 @@ function solve(model)
    ϕ = zeros(Float64, num_nodes)
 
    #Define the deformation initial guess for the nonlinear solver.
-   deformation_guess = model.Kff \ model.Ff
+   deformation_guess = equations.Kff \ equations.Ff
 
    #Solve for the beam deformations.
-   solution = nlsolve((R,U) ->residual!(R, U, model.Kff, model.Ff), deformation_guess)
+   solution = nlsolve((R,U) ->residual!(R, U, equations.Kff, equations.Ff), deformation_guess)
 
    #Pull the displacements and twist from the solution results.
-   u[model.free_dof_u] = solution.zero[1:length(model.free_dof_u)]
-   v[model.free_dof_v] = solution.zero[length(model.free_dof_u)+1:(length(model.free_dof_u) + length(model.free_dof_v))]
-   ϕ[model.free_dof_ϕ] = solution.zero[(length(model.free_dof_u) + length(model.free_dof_v))+1:(length(model.free_dof_u) + length(model.free_dof_v)+length(model.free_dof_ϕ))]
+   u[equations.free_dof.u] = solution.zero[1:length(equations.free_dof.u)]
+   v[equations.free_dof.v] = solution.zero[length(equations.free_dof.u)+1:(length(equations.free_dof.u) + length(equations.free_dof.v))]
+   ϕ[equations.free_dof.ϕ] = solution.zero[(length(equations.free_dof.u) + length(equations.free_dof.v))+1:(length(equations.free_dof.u) + length(equations.free_dof.v) + length(equations.free_dof.ϕ))]
 
-   #Add deformations to data structure.
-   model.u = u
-   model.v = v
-   model.ϕ = ϕ
+   outputs = Outputs(u, v, ϕ)
+
+   model = Model(inputs, equations, outputs)
 
    return model
 
