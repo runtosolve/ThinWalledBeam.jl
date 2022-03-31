@@ -20,8 +20,10 @@ Example Usage
 Solve Example 2 from [Plaut, R.H., Moen, C.D.(2021). "Lateral-Torsional Deformations of Single-Span and Two-Span Thin-Walled Beams with Continuous Bracing". Journal of Constructional Steel Research](https://www.sciencedirect.com/science/article/pii/S0143974X21000158?casa_token=52LwhLAs40wAAAAA:LjCOP5af8dSiEek3R40ggBnxfV0Svt89EdiwjRWF1_r-uF4eFvL8-r54udIpN7DeP9BZuQGA), see Figure 14.
 
 Z-section, no slope, simple span
+
 kϕ=1500 N*mm/rad/mm, kx=0.1 N/mm^2, gravity load
-qy = 1 kN/m
+
+qy = 5 kN/m
 
 
 ```julia

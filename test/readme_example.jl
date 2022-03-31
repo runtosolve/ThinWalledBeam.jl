@@ -14,7 +14,7 @@ plaut_solution = 0.0164 #radians
 
 #*********** Julia solution
 
-#inputs
+
 num_beam_segments = 48
 z = 0.0:7620.0/num_beam_segments:7620.0
 num_nodes = length(z)
@@ -50,6 +50,9 @@ supports = [(0.0, "fixed", "fixed", "fixed"),
 
 model = ThinWalledBeam.solve(z, Ix, Iy, Ixy, J, Cw, E, ν, G, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
 
+
+using Plots 
+plot(model.inputs.z, model.outputs.ϕ)
 
 ϕmax = maximum(model.outputs.ϕ)
 
