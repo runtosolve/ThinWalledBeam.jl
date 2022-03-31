@@ -24,7 +24,6 @@ struct Inputs
    J::Array{Float64}
    Cw::Array{Float64}
    E::Array{Float64}
-   ν::Array{Float64}
    G::Array{Float64}
    ax::Array{Float64}
    ay::Array{Float64}
@@ -340,10 +339,10 @@ function residual!(R, U, K, F)
 end
 
 
-function solve(z, Ix, Iy, Ixy, J, Cw, E, ν, G, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
+function solve(z, Ix, Iy, Ixy, J, Cw, E, G, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
 
    #Define inputs.
-   inputs = Inputs(z, Ix, Iy, Ixy, J, Cw, E, ν, G, ax, ay, ay_kx, kx, kϕ, qx, qy, end_boundary_conditions, supports)
+   inputs = Inputs(z, Ix, Iy, Ixy, J, Cw, E, G, ax, ay, ay_kx, kx, kϕ, qx, qy, end_boundary_conditions, supports)
 
    #Set up solution matrices from governing equations.
    equations = governing_equations(z, Ix, Iy, Ixy, J, Cw, E, G, kx, kϕ, ay_kx, qx, qy, ax, ay, supports, end_boundary_conditions)
