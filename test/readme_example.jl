@@ -48,7 +48,7 @@ supports = [(0.0, "fixed", "fixed", "fixed"),
             (7620.0, "fixed", "fixed", "fixed")]
 
 
-model = ThinWalledBeam.solve(z, Ix, Iy, Ixy, J, Cw, E, ν, G, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
+model = ThinWalledBeam.solve(z, Ix, Iy, Ixy, J, Cw, E, G, kx, kϕ, ay_kx, qx, qy, ax, ay, end_boundary_conditions, supports)
 
 
 using Plots 
