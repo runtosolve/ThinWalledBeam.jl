@@ -1,7 +1,7 @@
 using ThinWalledBeam
 
 
-#Example 2 from Plaut, R.H., Moen, C.D.(2020). "Lateral-Torsional Deformations of Single-Span and Two-Span Thin-Walled Beams with Continuous Bracing".
+#Example 2 from Plaut, R.H., Moen, C.D.(2021). "Lateral-Torsional Deformations of Single-Span and Two-Span Thin-Walled Beams with Continuous Bracing".
 #Journal of Constructional Steel Research.
 
 #Z-section, no slope, single span, fixed-fixed
@@ -10,7 +10,7 @@ using ThinWalledBeam
 #Check again Figure 14 in the Plaut and Moen (2020) manuscript which was solved with Mathematica.
 #  max ϕ
 
-plaut_solution = 0.0164 #radians
+plaut_solution = 0.0023 #radians
 
 #*********** Julia solution
 
@@ -32,12 +32,12 @@ G = E./(2 .*(1 .+ ν))
 ax = ones(Float64, num_nodes) * 27.826
 ay = ones(Float64, num_nodes) * 101.6
 
-kx = ones(Float64, num_nodes) * 0.1/1000
+kx = ones(Float64, num_nodes) * 0.1/1000  #kN/mm/mm
 ay_kx = ones(Float64, num_nodes) * 101.6
-kϕ = ones(Float64, num_nodes) * 1500/1000
+kϕ = ones(Float64, num_nodes) * 1500/1000 #kN-mm/rad/mm
 
 qx = ones(Float64, num_nodes) * 0.0
-qy = ones(Float64, num_nodes) * 5.0/1000 #kN/mm
+qy = ones(Float64, num_nodes) * 1.0/1000 #kN/mm
 
 #u''=v''=ϕ''=0 (simply-supported), u'=v'=ϕ'=0  (fixed), u''=v''=ϕ''=u'''=v'''=ϕ'''=0 (free, e.g., a cantilever)
 end_boundary_conditions = ["simply-supported", "simply-supported"]

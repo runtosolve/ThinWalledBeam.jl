@@ -1,8 +1,6 @@
 module ThinWalledBeam
 
-using DiffEqOperators
-using LinearAlgebra
-using NLsolve
+using FornbergFiniteDiff, LinearAlgebra, NLsolve
 
 export solve
 
@@ -71,29 +69,35 @@ end
 
 function calculate_derivative_operators(dz)
 
-   #Define the number of nodes.
-   num_nodes = length(dz) + 1
-
-   #Add extra dz on each end for padding nodes used in the CenteredDifference function.
-   dz = [dz[1]; dz; dz[end]]
+   z = [0.0; cumsum(dz)]
+   num_nodes = length(z)
 
    #Calculate the 4th derivative operator.
+   Azzzz = zeros(Float64, (num_nodes, num_nodes))
    nth_derivative = 4
-   derivative_order = 2
-   Azzzz = DiffEqOperators.CenteredDifference(nth_derivative, derivative_order, dz, num_nodes)
+   
+   for i=3:num_nodes-2
+   
+      x = z[i-2:i+2]
+      x0 = x[3]
+      stencil = FornbergFiniteDiff.calculate_weights(nth_derivative, x0, x)
+      Azzzz[i, i-2:i+2] = stencil
 
-   #Convert the operator to a matrix.
-   Azzzz = Array(Azzzz)   
+   end
 
-   #Trim off the ghost nodes.
-   Azzzz = Azzzz[:,2:end-1]  
 
    #Calculate the 2nd derivative operator.
+   Azz = zeros(Float64, (num_nodes, num_nodes))
    nth_derivative = 2
-   derivative_order = 2
-   Azz = DiffEqOperators.CenteredDifference(nth_derivative, derivative_order, dz, num_nodes)
-   Azz = Array(Azz)   
-   Azz = Azz[:,2:end-1]  
+   
+   for i=3:num_nodes-2
+   
+      x = z[i-2:i+2]
+      x0 = x[3]
+      stencil = FornbergFiniteDiff.calculate_weights(nth_derivative, x0, x)
+      Azz[i, i-2:i+2] = stencil
+
+   end
 
    return Azzzz, Azz
 

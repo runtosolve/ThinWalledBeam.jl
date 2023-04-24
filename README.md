@@ -9,7 +9,7 @@ Install
 -----------------------------
 
 ```julia
-(v1.7) pkg> add ThinWalledBeam
+(v1.8) pkg> add ThinWalledBeam
 ```
 
 (Type `]` to enter package mode.)
@@ -23,7 +23,7 @@ Z-section, no slope, simple span
 
 kϕ=1500 N*mm/rad/mm, kx=0.1 N/mm^2, gravity load
 
-qy = 5 kN/m
+qy = 1 kN/m
 
 
 ```julia
@@ -52,7 +52,7 @@ ay_kx = ones(Float64, num_nodes) * 101.6
 kϕ = ones(Float64, num_nodes) * 1500/1000
 
 qx = ones(Float64, num_nodes) * 0.0
-qy = ones(Float64, num_nodes) * 5.0/1000 #kN/mm
+qy = ones(Float64, num_nodes) * 1.0/1000 #kN/mm
 
 #u''=v''=ϕ''=0 (simply-supported), u'=v'=ϕ'=0  (fixed), u''=v''=ϕ''=u'''=v'''=ϕ'''=0 (free, e.g., a cantilever)
 end_boundary_conditions = ["simply-supported", "simply-supported"]
